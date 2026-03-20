@@ -1,0 +1,7 @@
+- name: Cleanup temporary files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/trivy"
+    - "/tmp/trivy_{{ trivy_version }}.tar.gz"

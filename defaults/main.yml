@@ -1,0 +1,20 @@
+---
+trivy_version: "0.69.3"
+trivy_bin_path: "/usr/local/bin/trivy"
+trivy_arch_map:
+  x86_64: "64bit"
+  aarch64: "ARM64"
+  armv7l: "ARM"
+trivy_arch: "{{ trivy_arch_map[ansible_facts['architecture']] | default(ansible_facts['architecture']) }}"
+trivy_download_url: https://github.com/aquasecurity/trivy/releases/download/v{{ trivy_version }}/trivy_{{ trivy_version }}_Linux-{{ trivy_arch }}.tar.gz
+trivy_checksums:
+  64bit: "sha256:1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75"
+  ARM64: "sha256:d76d7c30829af5349aa2461f6703c56b3e392f7de691a231850c9a4e57827c2b"
+  ARM: "sha256:7e3924a974e912e57b4a99f65ece7931f8079584dae12eb7845024f97087bdfd"
+trivy_checksum: "{{ trivy_checksums[trivy_arch] }}"
+trivy_scan_target: "/"                  # rootfs scan of host; can be dir:/path, etc.
+trivy_scanners: "vuln"                  # vuln,secret,config,license – comma-separated or list
+trivy_pkg_types: "os"                   # os,library – comma-separated or list
+trivy_sbom_format: "spdx-json"          # options: spdx-json, cyclonedx-json, cyclonedx-xml, table, json
+trivy_extra_args: []                    # e.g. ["--severity", "HIGH,CRITICAL", "--ignore-unfixed"]
+trivy_sbom_output_filename: "/sbom.{{ trivy_sbom_format | regex_replace('^.*-', '') }}"

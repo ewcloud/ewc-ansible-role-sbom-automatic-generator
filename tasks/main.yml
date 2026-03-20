@@ -1,0 +1,79 @@
+---
+- name: Verify Linux distribution
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in ['Ubuntu', 'Rocky']
+    fail_msg: "Supports Ubuntu and RockyLinux. Detected: {{ ansible_facts['distribution'] }}."
+    success_msg: "Running supported {{ ansible_facts['distribution'] }} distribution."
+
+- name: Download Trivy archive
+  ansible.builtin.get_url:
+    url: "{{ trivy_download_url }}"
+    dest: "/tmp/trivy_{{ trivy_version }}.tar.gz"
+    checksum: "{{ trivy_checksum }}"
+    mode: '0644'
+    force: false
+  notify: Cleanup temporary files
+
+- name: Unarchive Trivy
+  ansible.builtin.unarchive:
+    src: "/tmp/trivy_{{ trivy_version }}.tar.gz"
+    dest: "/tmp"
+    remote_src: true
+    creates: "/tmp/trivy_{{ trivy_version }}"
+
+- name: Copy Trivy binary to final location
+  ansible.builtin.copy:
+    src: "/tmp/trivy"
+    dest: "{{ trivy_bin_path }}"
+    mode: '0755'
+    remote_src: true
+  become: true
+
+- name: Verify Trivy binary exists and version matches
+  ansible.builtin.command: "{{ trivy_bin_path }} version --format json"
+  register: trivy_version_check
+  changed_when: false
+  failed_when: trivy_version_check.rc != 0
+  check_mode: false
+
+- name: Show installed Trivy package version
+  ansible.builtin.assert:
+    that:
+      - trivy_version_check.stdout | from_json | json_query('Version') == trivy_version
+    fail_msg: "Installed Trivy version mismatch: expected {{ trivy_version }}"
+    success_msg: "trivy: {{ trivy_version }}"
+
+- name: Ensure output directory exists
+  ansible.builtin.file:
+    path: "{{ trivy_sbom_output_filename | dirname }}"
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Run Trivy SBOM generation
+  ansible.builtin.command:
+    cmd: |
+      {{ trivy_bin_path }} rootfs
+      --format {{ trivy_sbom_format }}
+      --output {{ trivy_sbom_output_filename }}
+      --scanners {{ trivy_scanners }}
+      --pkg-types {{ trivy_pkg_types }}
+      {{ trivy_scan_target }}
+  changed_when: true
+  become: true
+
+- name: Generate SBOM file stats
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      cat {{ trivy_sbom_output_filename }} | wc -l
+  args:
+    executable: /bin/bash
+  register: sbom_stats
+  changed_when: true
+
+- name: Log SBOM stats
+  ansible.builtin.debug:
+    msg:
+      - "Successfully generated SBOM at {{ trivy_sbom_output_filename }} ( {{ sbom_stats.stdout }} lines)"
